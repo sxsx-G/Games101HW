@@ -215,6 +215,7 @@ void rst::rasterizer::clear(rst::Buffers buff)
     }
 }
 
+
 rst::rasterizer::rasterizer(int w, int h) : width(w), height(h)
 {
     frame_buf.resize(w * h);

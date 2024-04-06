@@ -22,10 +22,28 @@ Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos)
 Eigen::Matrix4f get_model_matrix(float rotation_angle)
 {
     Eigen::Matrix4f model = Eigen::Matrix4f::Identity();
+    float radian = rotation_angle / 180 * MY_PI;
+    model << cos(radian), -sin(radian), 0, 0, sin(radian), cos(radian), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1;
 
-    // TODO: Implement this function
-    // Create the model matrix for rotating the triangle around the Z axis.
-    // Then return it.
+    return model;
+}
+
+
+/* 绕任意轴旋转矩阵 */
+Eigen::Matrix4f get_axis_model_matrix(float rotation_angle, Eigen::Vector3f axis)
+{
+    float angle = rotation_angle / 180 * MY_PI;
+    Eigen::Matrix3f N = Eigen::Matrix3f::Identity();
+    N << 0, -axis.z(), axis.y(),
+            axis.z(), 0, -axis.x(),
+            -axis.y(), axis.x(), 0;
+    Eigen::Matrix3f rod = std::cos(angle) * Eigen::Matrix3f::Identity() + (1 - std::cos(angle)) * axis * axis.transpose() + std::sin(angle) * N;
+    Eigen::Matrix4f model = Eigen::Matrix4f::Identity();
+
+    model << rod(0, 0), rod(0, 1), rod(0, 2), 0,
+            rod(1, 0), rod(1, 1), rod(1, 2), 0,
+            rod(2, 0), rod(2, 1), rod(2, 2), 0,
+            0, 0, 0, 1;
 
     return model;
 }
@@ -33,16 +51,22 @@ Eigen::Matrix4f get_model_matrix(float rotation_angle)
 Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio,
                                       float zNear, float zFar)
 {
-    // Students will implement this function
-
     Eigen::Matrix4f projection = Eigen::Matrix4f::Identity();
 
-    // TODO: Implement this function
-    // Create the projection matrix for the given parameters.
-    // Then return it.
+    float tan_half_fov = tan(eye_fov * M_PI / 360.0);
+    float t = zNear * tan_half_fov;
+    float r = aspect_ratio * t;
+    float l = -r;
+    float b = -t;
+
+    projection << 2*zNear/(r-l), 0, (r+l)/(r-l), 0,
+            0, 2*zNear/(t-b), (t+b)/(t-b), 0,
+            0, 0, -(zFar+zNear)/(zFar-zNear), -2*zFar*zNear/(zFar-zNear),
+            0, 0, -1, 0;
 
     return projection;
 }
+
 
 int main(int argc, const char** argv)
 {
@@ -62,14 +86,18 @@ int main(int argc, const char** argv)
 
     rst::rasterizer r(700, 700);
 
-    Eigen::Vector3f eye_pos = {0, 0, 5};
+    Eigen::Vector3f eye_pos = {0, 0, 10};
 
     std::vector<Eigen::Vector3f> pos{{2, 0, -2}, {0, 2, -2}, {-2, 0, -2}};
 
     std::vector<Eigen::Vector3i> ind{{0, 1, 2}};
 
+    std::vector<Eigen::Vector3f> pos2{{2, 0, -1}, {0, 2, -1}, {-2, 0, -1}};
+
     auto pos_id = r.load_positions(pos);
     auto ind_id = r.load_indices(ind);
+
+    auto pos_id2 = r.load_positions(pos2);
 
     int key = 0;
     int frame_count = 0;
@@ -77,10 +105,11 @@ int main(int argc, const char** argv)
     if (command_line) {
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);
 
+        //r.set_model(get_model_matrix(angle));
         r.set_model(get_model_matrix(angle));
         r.set_view(get_view_matrix(eye_pos));
         r.set_projection(get_projection_matrix(45, 1, 0.1, 50));
-
+        r.draw(pos_id, ind_id, rst::Primitive::Triangle);
         r.draw(pos_id, ind_id, rst::Primitive::Triangle);
         cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
         image.convertTo(image, CV_8UC3, 1.0f);
@@ -93,11 +122,12 @@ int main(int argc, const char** argv)
     while (key != 27) {
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);
 
-        r.set_model(get_model_matrix(angle));
+        r.set_model(get_axis_model_matrix(angle, {1, 0, 0}));
         r.set_view(get_view_matrix(eye_pos));
-        r.set_projection(get_projection_matrix(45, 1, 0.1, 50));
+        r.set_projection(get_projection_matrix(90, 1, 0.1, 50));
 
         r.draw(pos_id, ind_id, rst::Primitive::Triangle);
+        r.draw(pos_id2, ind_id, rst::Primitive::Triangle);
 
         cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
         image.convertTo(image, CV_8UC3, 1.0f);
@@ -107,11 +137,16 @@ int main(int argc, const char** argv)
         std::cout << "frame count: " << frame_count++ << '\n';
 
         if (key == 'a') {
-            angle += 10;
+            angle += 5;
         }
         else if (key == 'd') {
-            angle -= 10;
+            angle -= 5;
+        } else if (key == 'w') {
+            eye_pos.z() -= 1;
+        } else if (key == 's') {
+            eye_pos.z() += 1;
         }
+
     }
 
     return 0;
